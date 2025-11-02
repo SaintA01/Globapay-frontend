@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const morgan = require('morgan');
 require('dotenv').config();
 
 const { pool } = require('./config/database');
@@ -18,24 +19,35 @@ app.use(cors({
 
 // Rate Limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  message: 'Too many requests from this IP, please try again later.'
 });
-app.use(limiter);
+app.use('/api/', limiter);
+
+// Logging
+app.use(morgan('combined'));
 
 // Body Parsing Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Database Connection Test
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error('Error acquiring client', err.stack);
-  } else {
+const testDatabase = async () => {
+  try {
+    const client = await pool.connect();
     console.log('✅ PostgreSQL Connected Successfully');
-    release();
+    
+    // Test query
+    const result = await client.query('SELECT version()');
+    console.log('📊 Database Version:', result.rows[0].version);
+    
+    client.release();
+  } catch (err) {
+    console.error('❌ Database connection failed:', err.message);
+    process.exit(1);
   }
-});
+};
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
@@ -47,11 +59,32 @@ app.use('/api/admin', require('./routes/admin'));
 app.use('/api/webhook', require('./routes/webhook'));
 
 // Health Check
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
-    message: 'Globapay API is running!',
-    timestamp: new Date().toISOString()
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.status(200).json({ 
+      status: 'OK', 
+      message: 'Globapay API is running!',
+      database: 'Connected',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || 'development'
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'ERROR', 
+      message: 'Database connection failed',
+      error: error.message 
+    });
+  }
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Globapay API Server',
+    version: '1.0.0',
+    documentation: '/api/health',
+    status: 'Running'
   });
 });
 
@@ -60,11 +93,25 @@ app.use(errorHandler);
 
 // 404 Handler
 app.use('*', (req, res) => {
-  res.status(404).json({ message: 'Route not found' });
+  res.status(404).json({ 
+    success: false,
+    message: 'Route not found',
+    path: req.originalUrl 
+  });
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-});
+
+// Start server after database test
+const startServer = async () => {
+  await testDatabase();
+  
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'Not set'}`);
+    console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+  });
+};
+
+startServer().catch(console.error);
