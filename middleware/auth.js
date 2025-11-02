@@ -37,3 +37,39 @@ const auth = {
       if (token) {
         const decoded = jwt.verify(token, config.jwt.secret);
         const query = 'SELECT id, name, email, phone, country, balance FROM users WHERE id = $1';
+        const result = await pool.query(query, [decoded.userId]);
+        
+        if (result.rows[0]) {
+          req.user = result.rows[0];
+        }
+      }
+      
+      next();
+    } catch (error) {
+      next(); // Continue without user
+    }
+  },
+
+  // Admin only middleware
+  adminOnly: async (req, res, next) => {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: 'Authentication required.' });
+      }
+
+      // Check if user is admin (you can add an is_admin field to users table)
+      const query = 'SELECT is_admin FROM users WHERE id = $1';
+      const result = await pool.query(query, [req.user.id]);
+      
+      if (!result.rows[0]?.is_admin) {
+        return res.status(403).json({ message: 'Admin access required.' });
+      }
+
+      next();
+    } catch (error) {
+      res.status(500).json({ message: 'Server error.' });
+    }
+  }
+};
+
+module.exports = auth;
