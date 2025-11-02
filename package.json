@@ -1,13 +1,13 @@
 {
   "name": "globapay-backend",
   "version": "1.0.0",
-  "description": "Globapay Backend API - Digital Services Platform",
+  "description": "Globapay Backend API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "migrate": "node scripts/migrate.js",
-    "seed": "node scripts/seed.js"
+    "migrate": "node -e \"require('./config/database').runMigrations()\"",
+    "seed": "node seeders/run-seeders.js"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -21,8 +21,7 @@
     "joi": "^17.11.0",
     "helmet": "^7.1.0",
     "express-rate-limit": "^7.1.5",
-    "uuid": "^9.0.1",
-    "morgan": "^1.10.0"
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
