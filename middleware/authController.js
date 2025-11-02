@@ -117,3 +117,29 @@ const authController = {
       const { currentPassword, newPassword } = req.body;
 
       // Get user with password
+      const user = await User.findByEmail(req.user.email);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Verify current password
+      const isValidPassword = await User.verifyPassword(currentPassword, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ message: 'Current password is incorrect' });
+      }
+
+      // Update password
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      await pool.query('UPDATE users SET password = $1, updated_at = NOW() WHERE id = $2', [
+        hashedPassword,
+        req.user.id
+      ]);
+
+      res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+      next(error);
+    }
+  }
+};
+
+module.exports = authController;
